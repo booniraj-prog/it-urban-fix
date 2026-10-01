@@ -25,6 +25,11 @@ export function LandingPage() {
           <p className="lede">
             {brand.name} connects you with laptop repair, network setup, backups, and small-office support in the areas we actually cover.
           </p>
+          <ul className="hero-chips">
+            <li>Quote before confirm</li>
+            <li>Covered areas only</li>
+            <li>Named technician</li>
+          </ul>
           <div className="hero-finder">
             <form
               className="search-panel"
@@ -119,16 +124,33 @@ export function LandingPage() {
 
 function HeroArt() {
   return (
-    <svg className="hero-art" viewBox="0 0 440 360" role="img" aria-label="Abstract laptop, house, and location pin">
-      <rect x="24" y="36" width="392" height="300" rx="28" fill="#e7f3ef" />
-      <rect x="70" y="78" width="180" height="120" rx="16" fill="#123f39" />
-      <rect x="86" y="94" width="148" height="78" rx="8" fill="#f4f0e7" />
-      <path d="M58 214h204" stroke="#123f39" strokeWidth="10" strokeLinecap="round" />
-      <path d="M250 150l70-54 70 54v92H250z" fill="#b8612e" />
-      <rect x="300" y="176" width="40" height="66" fill="#f4f0e7" />
-      <circle cx="332" cy="78" r="26" fill="#f3d7a1" />
-      <path d="M332 64v28M318 78h28" stroke="#123f39" strokeWidth="4" strokeLinecap="round" />
-    </svg>
+    <div className="hero-stage">
+      <svg className="hero-art" viewBox="0 0 460 400" role="img" aria-label="A laptop showing a quote, beside a house and a location pin">
+        <rect x="16" y="20" width="428" height="360" rx="32" fill="#e7f3ef" stroke="#e6b31a" strokeWidth="3" />
+        <circle cx="390" cy="72" r="36" fill="#f3d7a1" />
+        <circle cx="78" cy="330" r="22" fill="#d7ebe4" />
+        <rect x="58" y="92" width="196" height="128" rx="16" fill="#123f39" />
+        <rect x="72" y="106" width="168" height="92" rx="8" fill="#fffdf8" />
+        <rect x="88" y="122" width="92" height="8" rx="4" fill="#1c6b60" />
+        <rect x="88" y="140" width="136" height="6" rx="3" fill="#e3dcd0" />
+        <rect x="88" y="154" width="112" height="6" rx="3" fill="#e3dcd0" />
+        <rect x="88" y="172" width="48" height="10" rx="5" fill="#e6b31a" />
+        <path d="M46 236h220" stroke="#123f39" strokeWidth="12" strokeLinecap="round" />
+        <path d="M248 168l78-58 78 58v108H248z" fill="#b8612e" stroke="#e6b31a" strokeWidth="3" strokeLinejoin="round" />
+        <rect x="304" y="198" width="44" height="78" rx="2" fill="#fffdf8" />
+        <rect x="270" y="196" width="22" height="18" rx="2" fill="#f3d7a1" />
+        <rect x="360" y="196" width="22" height="18" rx="2" fill="#f3d7a1" />
+        <circle cx="348" cy="92" r="22" fill="#fffdf8" stroke="#e6b31a" strokeWidth="3" />
+        <path d="M348 82v20M338 92h20" stroke="#123f39" strokeWidth="3" strokeLinecap="round" />
+        <path d="M96 286c0-16 12-26 26-26s26 10 26 26c0 18-26 40-26 40s-26-22-26-40z" fill="#1c6b60" />
+        <circle cx="122" cy="284" r="8" fill="#fffdf8" />
+      </svg>
+      <div className="hero-slip">
+        <span>Before you book</span>
+        <strong>The quote is visible</strong>
+        <small>Fixed fees stay labeled.</small>
+      </div>
+    </div>
   );
 }
 

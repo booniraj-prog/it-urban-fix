@@ -11,6 +11,7 @@
   --copper: #9a4e24;
   --copper-soft: #f8ebe3;
   --gold: #f3d7a1;
+  --yellow: #e6b31a;
   --ok: #1d6b45;
   --ok-soft: #e5f6ec;
   --warn: #7a5410;
@@ -202,10 +203,36 @@ button.nav-toggle { display: none; }
   width: min(1120px, calc(100% - 32px));
   margin: 28px auto 10px;
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 28px;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 36px;
   align-items: center;
+  padding: 8px 8px 12px;
 }
+.hero-chips { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 0 0 16px; }
+.hero-chips li {
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: rgba(255, 253, 248, 0.86);
+  border: 1px solid var(--line);
+}
+.hero .hero-finder { border: 2px solid var(--yellow); }
+.hero .btn-primary { border-color: var(--yellow); box-shadow: 0 0 0 1px var(--yellow), var(--elev-1); }
+.hero-stage { position: relative; }
+.hero-art { width: 100%; height: auto; display: block; filter: drop-shadow(0 16px 28px rgba(18, 63, 57, 0.12)); }
+.hero-slip {
+  position: absolute;
+  left: 22px;
+  bottom: 28px;
+  width: min(190px, 48%);
+  background: var(--paper-2);
+  border: 2px solid var(--yellow);
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: 0 12px 24px rgba(18, 63, 57, 0.12);
+}
+.hero-slip span { display: block; letter-spacing: 0.06em; text-transform: uppercase; color: var(--copper); font-weight: 700; }
+.hero-slip strong { display: block; font-size: 1.15rem; margin-top: 2px; }
+.hero-slip small { display: block; color: var(--muted); margin-top: 2px; }
 .search-panel, .postal-form, .panel, .book-panel, .service-card, .category-card, .review, .stat, .zone-tile, .hero-finder, .payment-panel, .role-card, .filters, .filters-wide {
   position: relative;
   overflow: hidden;
@@ -262,7 +289,6 @@ button.nav-toggle { display: none; }
 .postal-row { display: flex; gap: 10px; align-items: center; }
 .postal-row input { flex: 1; min-width: 0; }
 .postal-row .btn { flex: 0 0 auto; white-space: nowrap; }
-.hero-art { width: 100%; height: auto; }
 .trust, .category-grid, .card-grid, .stat-grid, .zone-board { display: grid; gap: 20px; }
 .trust { grid-template-columns: repeat(3, 1fr); margin: 28px auto; }
 .trust article { padding: 8px 8px 0; }
