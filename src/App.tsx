@@ -11,7 +11,7 @@ import { StoreProvider } from "./state/store";
 
 export function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "")}>
       <StoreProvider>
         <AppErrorBoundary>
           <Routes>
