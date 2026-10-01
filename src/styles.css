@@ -237,7 +237,7 @@ button.nav-toggle { display: none; }
   position: relative;
   overflow: hidden;
   background:
-    linear-gradient(155deg, rgba(255, 253, 248, 0.82) 0%, rgba(229, 243, 239, 0.7) 46%, rgba(243, 215, 161, 0.42) 100%);
+    linear-gradient(165deg, #ffffff 0%, #fffdf8 70%, #f7fbf9 100%);
   border: 1px solid rgba(255, 255, 255, 0.78);
   border-radius: var(--radius);
   box-shadow:
@@ -495,7 +495,7 @@ tbody tr:hover { background: #f6fbf9; }
   position: relative;
   overflow: hidden;
   background:
-    linear-gradient(155deg, rgba(255, 253, 248, 0.82) 0%, rgba(229, 243, 239, 0.7) 46%, rgba(243, 215, 161, 0.42) 100%);
+    linear-gradient(165deg, #ffffff 0%, #fffdf8 70%, #f7fbf9 100%);
   border: 1px solid rgba(255, 255, 255, 0.78);
   border-radius: var(--radius);
   box-shadow:
