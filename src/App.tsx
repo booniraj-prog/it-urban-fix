@@ -6,12 +6,16 @@ import { BookPage } from "./pages/Book";
 import { LoginPage } from "./pages/Login";
 import { LandingPage, ServiceDetailPage, ServicesPage } from "./pages/Market";
 import { AreasPage, CapacityPage, CatalogPage, DispatchPage, OpsBookingPage, OpsBookingsPage, OverviewPage, ProvidersPage } from "./pages/Ops";
-import { AvailabilityPage, ProviderHome, ProviderJobPage } from "./pages/ProviderArea";
+import { ReportsPage } from "./pages/Reports";
+import { RolesPage } from "./pages/Roles";
+import { AvailabilityPage, ProviderHome, ProviderJobPage, ProviderProfilePage } from "./pages/ProviderArea";
 import { StoreProvider } from "./state/store";
+
+const routerBasename = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export function App() {
   return (
-    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+    <BrowserRouter {...(routerBasename ? { basename: routerBasename } : {})}>
       <StoreProvider>
         <AppErrorBoundary>
           <Routes>
@@ -34,6 +38,7 @@ export function App() {
             >
               <Route index element={<ProviderHome />} />
               <Route path="jobs/:bookingId" element={<ProviderJobPage />} />
+              <Route path="profile" element={<ProviderProfilePage />} />
               <Route path="availability" element={<AvailabilityPage />} />
             </Route>
             <Route
@@ -52,6 +57,8 @@ export function App() {
               <Route path="bookings" element={<OpsBookingsPage />} />
               <Route path="bookings/:bookingId" element={<OpsBookingPage />} />
               <Route path="providers" element={<ProvidersPage />} />
+              <Route path="reports" element={<ReportsPage />} />
+              <Route path="roles" element={<RolesPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -1,5 +1,6 @@
 import { calculateQuote } from "../domain/pricing";
 import { createId, dateOffset } from "../domain/format";
+import { defaultAccessRoles } from "../domain/roles";
 import type {
   Actor,
   AppState,
@@ -720,6 +721,7 @@ export function createSeedState(): AppState {
 
   return {
     users,
+    accessRoles: defaultAccessRoles(),
     session: null,
     customers,
     cities,
@@ -826,5 +828,16 @@ function person(
     workingHours: hours(),
     timeOff,
     acceptingWork,
+    phone: TECH_PHONES[id] ?? "",
   };
 }
+
+const TECH_PHONES: Record<string, string> = {
+  "p-arjun": "9845012211",
+  "p-neha": "9845023344",
+  "p-rohan": "9845034455",
+  "p-sara": "9845045566",
+  "p-vikram": "9845056677",
+  "p-ananya": "9845067788",
+  "p-imran": "9845078899",
+};

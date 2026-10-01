@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { brand } from "../brand";
 import { coverageMessage, zoneHealth } from "../domain/coverage";
@@ -74,7 +75,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={(event) => event.stopPropagation()}>
         <header>
           <h2 id="modal-title">{title}</h2>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close dialog">
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close dialog" data-tooltip="Close" title="Close">
             <Icon name="close" />
           </button>
         </header>
@@ -164,38 +165,46 @@ export function NoticeBell() {
   const { state, markNoticesRead } = useStore();
   const [open, setOpen] = useState(false);
   const mine = state.notices.filter((notice) => notice.userId === state.session?.userId);
+  const count = mine.length;
   const unread = mine.filter((notice) => !notice.read).length;
   if (!state.session) return null;
+  const label = count === 0 ? "Notifications" : `Notifications, ${count}${unread ? `, ${unread} unread` : ""}`;
   return (
-    <div className="notice-wrap">
+    <>
       <button
         type="button"
         className="icon-btn"
         aria-expanded={open}
-        aria-label={unread ? `Notifications, ${unread} unread` : "Notifications"}
+        aria-haspopup="dialog"
+        aria-label={label}
+        data-tooltip={label}
+        title={label}
         onClick={() => {
-          setOpen((value) => !value);
-          if (!open) markNoticesRead();
+          setOpen(true);
+          markNoticesRead();
         }}
       >
         <Icon name="bell" />
-        {unread ? <span className="dot">{unread}</span> : null}
+        {count > 0 ? <span className="dot">{count}</span> : null}
       </button>
-      {open ? (
-        <div className="notice-pop" role="region" aria-label="Demo notifications">
-          <MockNote>In-app demo only. No SMS or email is sent.</MockNote>
-          {mine.length === 0 ? <p>No notices yet.</p> : null}
-          <ul>
-            {mine.slice(0, 6).map((notice) => (
-              <li key={notice.id}>
-                <strong>{notice.title}</strong>
-                <p>{notice.body}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </div>
+      {open
+        ? createPortal(
+            <Modal title="Notifications" onClose={() => setOpen(false)}>
+              <MockNote>In-app demo only. No SMS or email is sent.</MockNote>
+              {mine.length === 0 ? <p>No notices yet.</p> : null}
+              <ul className="notice-list">
+                {mine.slice(0, 6).map((notice) => (
+                  <li key={notice.id}>
+                    <strong>{notice.title}</strong>
+                    <p>{notice.body}</p>
+                  </li>
+                ))}
+              </ul>
+            </Modal>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 
@@ -214,19 +223,21 @@ export function PostalChooser({ onDone }: { onDone?: () => void }) {
       }}
     >
       <Field id={id} label="Postal code" hint="Try 560038 for Indiranagar, or 400001 to see an area we do not cover.">
-        <input
-          id={id}
-          inputMode="numeric"
-          autoComplete="postal-code"
-          maxLength={6}
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          aria-describedby={`${id}-hint`}
-        />
+        <div className="postal-row">
+          <input
+            id={id}
+            inputMode="numeric"
+            autoComplete="postal-code"
+            maxLength={6}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            aria-describedby={`${id}-hint`}
+          />
+          <button className="btn btn-primary" type="submit">
+            Check coverage
+          </button>
+        </div>
       </Field>
-      <button className="btn btn-primary" type="submit">
-        Check coverage
-      </button>
       {state.coverage.status === "covered" && zone ? (
         <p className="banner banner-ok" role="status">
           {zone.name} is covered. Travel radius {zone.travelRadiusKm} km · lead time {zone.leadTimeHours} hours.

@@ -155,6 +155,7 @@ export interface Provider {
   workingHours: WorkingHours[];
   timeOff: string[];
   acceptingWork: boolean;
+  phone?: string;
 }
 
 export interface Address {
@@ -176,6 +177,22 @@ export interface Customer {
   addresses: Address[];
 }
 
+export interface AccessRole {
+  id: string;
+  name: string;
+  purpose: string;
+  status: "active" | "inactive";
+  permissions: string[];
+  /** Present for the three sign-in roles. Those roles cannot be deleted or deactivated. */
+  systemKey?: Role;
+}
+
+export interface GoogleIdentity {
+  sub: string;
+  email: string;
+  name: string;
+}
+
 export interface UserAccount {
   id: string;
   role: Role;
@@ -184,6 +201,9 @@ export interface UserAccount {
   password: string;
   customerId?: string;
   providerId?: string;
+  /** Google account subject, set after Sign in with Google or linking from a profile. */
+  googleSub?: string;
+  googleEmail?: string;
 }
 
 export interface Session {
@@ -305,6 +325,7 @@ export interface CoverageSelection {
 
 export interface AppState {
   users: UserAccount[];
+  accessRoles: AccessRole[];
   session: Session | null;
   customers: Customer[];
   cities: City[];

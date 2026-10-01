@@ -38,13 +38,15 @@ export function CustomerShell() {
       </a>
       <header className="site-header">
         <div className="header-inner">
-          <Link to="/" aria-label={`${brand.name} home`}>
-            <Logo />
-          </Link>
-          <button type="button" className="area-chip" onClick={() => setAreaOpen(true)}>
-            <Icon name="pin" size={16} />
-            {zone ? zone.name : state.coverage.status === "uncovered" ? state.coverage.postalCode : "Set area"}
-          </button>
+          <div className="brand-cluster">
+            <Link to="/" aria-label={`${brand.name} home`}>
+              <Logo />
+            </Link>
+            <button type="button" className="area-chip" onClick={() => setAreaOpen(true)}>
+              <Icon name="pin" size={16} />
+              {zone ? zone.name : state.coverage.status === "uncovered" ? state.coverage.postalCode : "Set area"}
+            </button>
+          </div>
           <button type="button" className="icon-btn nav-toggle" aria-expanded={open} aria-label="Menu" onClick={() => setOpen((value) => !value)}>
             <Icon name={open ? "close" : "menu"} />
           </button>
@@ -53,6 +55,7 @@ export function CustomerShell() {
             {state.session?.role === "customer" ? <NavLink to="/account">Bookings</NavLink> : null}
             {state.session?.role === "provider" ? <NavLink to="/provider">Technician</NavLink> : null}
             {state.session?.role === "admin" ? <NavLink to="/ops">Operations</NavLink> : null}
+            {state.session?.role === "customer" ? <span className="who-chip">{state.session.name}</span> : null}
             {state.session ? (
               <button type="button" className="btn btn-ghost btn-small" onClick={signOut}>
                 Sign out
@@ -96,7 +99,7 @@ export function ProviderShell() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
   return (
-    <div className="shell">
+    <div className="shell shell-provider">
       <aside className="sidebar">
         <Link to="/provider" aria-label="Technician home">
           <Logo />
@@ -106,14 +109,19 @@ export function ProviderShell() {
           <NavLink to="/provider" end>
             Today
           </NavLink>
+          <NavLink to="/provider/profile">Profile</NavLink>
           <NavLink to="/provider/availability">Availability</NavLink>
         </nav>
         <div className="side-foot">
+          <Link to="/provider/profile" className="who">
+            <strong>{state.session?.name}</strong>
+            <span>Technician</span>
+          </Link>
           <NoticeBell />
-          <span>{state.session?.name}</span>
           <button type="button" className="btn btn-ghost btn-small" onClick={signOut}>
             Sign out
           </button>
+          <p className="side-note">Sample jobs stored in this browser.</p>
         </div>
       </aside>
       <div className="content">
@@ -131,6 +139,8 @@ const opsLinks = [
   ["Capacity", "/ops/capacity"],
   ["Bookings", "/ops/bookings"],
   ["Technicians", "/ops/providers"],
+  ["Reports", "/ops/reports"],
+  ["Roles", "/ops/roles"],
 ] as const;
 
 export function OpsShell() {
@@ -140,7 +150,7 @@ export function OpsShell() {
     window.scrollTo(0, 0);
   }, [location.pathname]);
   return (
-    <div className="shell">
+    <div className="shell shell-ops">
       <aside className="sidebar">
         <Link to="/ops" aria-label="Operations home">
           <Logo />
@@ -154,11 +164,15 @@ export function OpsShell() {
           ))}
         </nav>
         <div className="side-foot">
+          <div className="who">
+            <strong>{state.session?.name}</strong>
+            <span>Operations</span>
+          </div>
           <NoticeBell />
-          <span>{state.session?.name}</span>
           <button type="button" className="btn btn-ghost btn-small" onClick={signOut}>
             Sign out
           </button>
+          <p className="side-note">Sample records. No payment is collected.</p>
         </div>
       </aside>
       <div className="content">

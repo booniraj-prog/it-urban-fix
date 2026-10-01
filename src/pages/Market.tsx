@@ -25,22 +25,24 @@ export function LandingPage() {
           <p className="lede">
             {brand.name} connects you with laptop repair, network setup, backups, and small-office support in the areas we actually cover.
           </p>
-          <form
-            className="search-panel"
-            onSubmit={(event) => {
-              event.preventDefault();
-              navigate(query.trim() ? `/services?q=${encodeURIComponent(query.trim())}` : "/services");
-            }}
-          >
-            <label htmlFor="home-search">What do you need help with?</label>
-            <div className="search-row">
-              <input id="home-search" name="q" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Laptop, Wi-Fi, printer…" />
-              <button className="btn btn-primary" type="submit">
-                <Icon name="search" size={18} /> Search
-              </button>
-            </div>
-          </form>
-          <PostalChooser />
+          <div className="hero-finder">
+            <form
+              className="search-panel"
+              onSubmit={(event) => {
+                event.preventDefault();
+                navigate(query.trim() ? `/services?q=${encodeURIComponent(query.trim())}` : "/services");
+              }}
+            >
+              <label htmlFor="home-search">What do you need help with?</label>
+              <div className="search-row">
+                <input id="home-search" name="q" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Laptop, Wi-Fi, printer…" />
+                <button className="btn btn-primary" type="submit">
+                  <Icon name="search" size={18} /> Search
+                </button>
+              </div>
+            </form>
+            <PostalChooser />
+          </div>
         </div>
         <HeroArt />
       </section>
@@ -186,7 +188,10 @@ export function ServicesPage() {
       <div className="section-head">
         <div>
           <h1>Services</h1>
-          <p>{zone ? `Showing availability for ${zone.name}.` : "Set an area to see which visits can actually be booked."}</p>
+          <p>
+            {results.length} {results.length === 1 ? "service" : "services"}
+            {zone ? ` in ${zone.name}` : ""}. {zone ? "Windows below match this area." : "Set an area to see which visits can actually be booked."}
+          </p>
         </div>
       </div>
       <div className="catalog-layout">

@@ -62,7 +62,7 @@ export function OverviewPage() {
             <strong>{counts[status] ?? 0}</strong>
           </article>
         ))}
-        <article className="stat">
+        <article className={rows.some((booking) => !booking.providerId && isOpenStatus(booking.status)) ? "stat stat-alert" : "stat"}>
           <span>Unassigned in view</span>
           <strong>{rows.filter((booking) => !booking.providerId && isOpenStatus(booking.status)).length}</strong>
         </article>

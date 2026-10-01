@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router-dom";
-import { BookingSummary, Empty, Field, MockNote, Modal, StatusPill, freshId, useTitle } from "../components/ui";
-import { formatDate, formatWindow, money } from "../domain/format";
+import { PaymentPanel } from "../components/PaymentPanel";
+import { Empty, Field, MockNote, Modal, StatusPill, Timeline, freshId, useTitle } from "../components/ui";
+import { formatDate, formatWindow, modeLabel, money } from "../domain/format";
 import { canCustomerCancel, canCustomerReschedule } from "../domain/lifecycle";
+import { jobWarnings } from "../domain/matching";
 import { listSlots } from "../domain/scheduling";
 import { useStore } from "../state/store";
 
@@ -173,7 +175,7 @@ function BookingTable({ rows }: { rows: ReturnType<typeof useStore>["state"]["bo
 export function BookingDetailPage() {
   const { bookingId } = useParams();
   const location = useLocation();
-  const { state, cancelBooking, rescheduleBooking } = useStore();
+  const { state, cancelBooking, rescheduleBooking, reopenBooking } = useStore();
   const booking = state.bookings.find((item) => item.id === bookingId);
   useTitle(booking?.ref ?? "Booking");
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -188,6 +190,23 @@ export function BookingDetailPage() {
   const now = new Date();
   const cancel = canCustomerCancel(booking, state.settings, now);
   const move = canCustomerReschedule(booking, state.settings, now);
+  const service = state.services.find((item) => item.id === booking.serviceId);
+  const zone = state.zones.find((item) => item.id === booking.zoneId);
+  const city = state.cities.find((item) => item.id === zone?.cityId);
+  const window = state.settings.windows.find((item) => item.id === booking.windowId);
+  const provider = state.providers.find((item) => item.id === booking.providerId);
+  const warnings = provider ? jobWarnings(state, booking, provider) : [];
+  const address = booking.address;
+  const next =
+    booking.status === "cancelled"
+      ? "This visit is cancelled."
+      : booking.status === "completed"
+        ? "This visit is complete."
+        : !provider
+          ? "A technician has not been assigned yet."
+          : !booking.accepted && booking.status === "assigned"
+            ? `${provider.name} is assigned and still needs to accept.`
+            : `${provider.name} is on this visit.`;
   const slots = listSlots(
     state,
     { serviceId: booking.serviceId, zoneId: booking.zoneId, mode: booking.mode, deviceType: booking.deviceType },
@@ -195,50 +214,136 @@ export function BookingDetailPage() {
     8,
   ).filter((slot) => slot.decision.ok && `${slot.date}|${slot.window.id}` !== `${booking.date}|${booking.windowId}`);
   return (
-    <div className="container page-block narrow">
+    <div className="container page-block narrow booking-sheet">
       {justBooked ? <p className="banner banner-ok">Booking stored in this demo. No payment was taken.</p> : null}
-      <BookingSummary booking={booking} audience="customer" />
-      <div className="row-actions">
-        <button className="btn btn-secondary" type="button" disabled={!move.allowed} onClick={() => setMoveOpen(true)}>
-          Reschedule
-        </button>
-        <button className="btn btn-danger" type="button" disabled={!cancel.allowed} onClick={() => setCancelOpen(true)}>
-          Cancel
-        </button>
-      </div>
-      <p className="hint">{move.allowed ? move.reason : move.reason}</p>
-      {!cancel.allowed ? <p className="hint">{cancel.reason}</p> : null}
+      <Link className="text-link" to="/account">Bookings</Link>
+      <article className="panel job-hero">
+        <div className="split-head">
+          <div>
+            <p className="eyebrow">{booking.ref}</p>
+            <h1>{service?.name ?? "Booking"}</h1>
+            <p className="job-when">
+              {formatDate(booking.date)}
+              {window ? ` · ${formatWindow(window)}` : ""}
+            </p>
+          </div>
+          <StatusPill status={booking.status} />
+        </div>
+        <p className={booking.status === "cancelled" ? "banner banner-warn" : provider ? "banner banner-ok" : "banner banner-info"}>{next}</p>
+        {warnings.length ? <p className="banner banner-warn">{warnings[0]}</p> : null}
+        <div className="row-actions">
+          {booking.status === "cancelled" ? (
+            <button className="btn btn-primary" type="button" onClick={() => reopenBooking(booking.id)}>
+              Reopen visit
+            </button>
+          ) : (
+            <>
+              <button className="btn btn-secondary" type="button" disabled={!move.allowed} onClick={() => setMoveOpen(true)}>
+                Reschedule
+              </button>
+              <button className="btn btn-danger" type="button" disabled={!cancel.allowed} onClick={() => setCancelOpen(true)}>
+                Cancel
+              </button>
+            </>
+          )}
+        </div>
+        {booking.status === "cancelled" ? (
+          <p className="hint">Reopens the same window when a technician is still free. No payment is taken.</p>
+        ) : (
+          <>
+            <p className="hint">{move.reason}</p>
+            {!cancel.allowed && cancel.reason !== move.reason ? <p className="hint">{cancel.reason}</p> : null}
+          </>
+        )}
+      </article>
+      <dl className="job-facts">
+        <div>
+          <dt>Where</dt>
+          <dd>{[zone?.name, city?.name].filter(Boolean).join(", ") || booking.postalCode}</dd>
+        </div>
+        <div>
+          <dt>Visit</dt>
+          <dd>
+            {modeLabel(booking.mode)} · {booking.deviceType}
+          </dd>
+        </div>
+      </dl>
+      <section className="panel">
+        <h2>Issue</h2>
+        <p>{booking.issue}</p>
+        {booking.answers.length ? (
+          <ul className="job-answers">
+            {booking.answers.map((answer) => (
+              <li key={answer.questionId}>
+                <span>{answer.label}</span>
+                {answer.value}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+      {booking.mode === "onsite" && address ? (
+        <section className="panel">
+          <h2>Address</h2>
+          <p>
+            {[address.line1, address.line2].filter(Boolean).join(", ")}
+            {address.landmark ? ` · ${address.landmark}` : ""}
+          </p>
+          <p className="hint">
+            {address.contactName !== booking.customerName ? `${address.contactName} · ` : ""}
+            {address.phone} · {address.postalCode}
+          </p>
+        </section>
+      ) : null}
+      {booking.remoteContact ? (
+        <section className="panel">
+          <h2>Remote</h2>
+          <p>
+            {booking.remoteContact.channel} · {booking.remoteContact.phone}
+            {booking.remoteContact.notes ? ` · ${booking.remoteContact.notes}` : ""}
+          </p>
+        </section>
+      ) : null}
+      <PaymentPanel quote={booking.quote} />
+      <details className="panel fold">
+        <summary>Activity ({booking.timeline.length})</summary>
+        <Timeline booking={booking} />
+      </details>
       {moveOpen ? (
         <Modal title="Choose a new window" onClose={() => setMoveOpen(false)}>
           {slots.length === 0 ? <Empty title="No other windows" body="Every other open slot is full or outside the rules." /> : null}
           <div className="slot-grid">
             {slots.map((slot) => {
               const key = `${slot.date}|${slot.window.id}`;
+              const picked = slotKey === key;
               return (
-                <label key={key} className="slot">
-                  <input type="radio" name="move" checked={slotKey === key} onChange={() => setSlotKey(key)} />
-                  <span>
-                    <strong>
-                      {formatDate(slot.date)} · {formatWindow(slot.window)}
-                    </strong>
-                  </span>
-                </label>
+                <div key={key} className={picked ? "slot-line is-picked" : "slot-line"}>
+                  <label className="slot">
+                    <input type="radio" name="move" checked={picked} onChange={() => setSlotKey(key)} />
+                    <span>
+                      <strong>
+                        {formatDate(slot.date)} · {formatWindow(slot.window)}
+                      </strong>
+                    </span>
+                  </label>
+                  {picked ? (
+                    <button
+                      className="btn btn-primary"
+                      type="button"
+                      onClick={() => {
+                        const [date, windowId] = key.split("|");
+                        if (!date || !windowId) return;
+                        const result = rescheduleBooking(booking.id, date, windowId);
+                        if (result.ok) setMoveOpen(false);
+                      }}
+                    >
+                      Confirm
+                    </button>
+                  ) : null}
+                </div>
               );
             })}
           </div>
-          <button
-            className="btn btn-primary"
-            type="button"
-            disabled={!slotKey}
-            onClick={() => {
-              const [date, windowId] = slotKey.split("|");
-              if (!date || !windowId) return;
-              const result = rescheduleBooking(booking.id, date, windowId);
-              if (result.ok) setMoveOpen(false);
-            }}
-          >
-            Confirm new window
-          </button>
         </Modal>
       ) : null}
       {cancelOpen ? (
@@ -252,7 +357,10 @@ export function BookingDetailPage() {
             type="button"
             onClick={() => {
               const result = cancelBooking(booking.id, reason);
-              if (result.ok) setCancelOpen(false);
+              if (result.ok || booking.status === "cancelled") {
+                setCancelOpen(false);
+                setReason("");
+              }
             }}
           >
             Cancel visit

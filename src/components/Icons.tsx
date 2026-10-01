@@ -21,7 +21,9 @@ export type IconName =
   | "user"
   | "calendar"
   | "alert"
-  | "tool";
+  | "tool"
+  | "eye"
+  | "eye-off";
 
 export function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
   return (
@@ -141,6 +143,19 @@ const paths: Record<IconName, ReactNode> = {
   tool: (
     <>
       <path d="M14 7a3 3 0 0 0-4 4L4 17l3 3 6-6a3 3 0 0 0 4-4l-2.5 2.5L13 11l1.5-1.5L17 7" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </>
+  ),
+  "eye-off": (
+    <>
+      <path d="M3 4l18 16" />
+      <path d="M9.5 6.2A10 10 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3.2 3.6" />
+      <path d="M6.1 7.8C3.7 9.4 2 12 2 12s3.5 6 10 6c1.2 0 2.3-.2 3.3-.6" />
     </>
   ),
 };

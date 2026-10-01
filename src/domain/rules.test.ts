@@ -6,6 +6,8 @@ import { assessProvider } from "./matching";
 import { calculateQuote } from "./pricing";
 import { canSchedule, findWindowOverlap } from "./scheduling";
 import { createSeedState } from "../data/seed";
+import { defaultAccessRoles } from "./roles";
+import { deleteAccessRole, linkGoogle, saveAccessRole, setAccessRoleStatus, signInWithGoogle, unlinkGoogle, updateTechnicianProfile } from "../state/logic";
 import type { AppState, Booking, Provider, Service, Zone } from "../types";
 
 const windows = [
@@ -84,6 +86,7 @@ function provider(partial: Partial<Provider> = {}): Provider {
 function state(partial: Partial<AppState> = {}): AppState {
   return {
     users: [],
+    accessRoles: [],
     session: null,
     customers: [],
     cities: [],
@@ -378,5 +381,86 @@ describe("matching and cutoff", () => {
     expect(current.services.length).toBeGreaterThan(7);
     expect(current.zones.some((item) => item.postalCodes.includes("560038"))).toBe(true);
     expect(now).toBeInstanceOf(Date);
+    expect(current.accessRoles.filter((role) => role.systemKey).length).toBe(3);
+  });
+
+  it("keeps sign-in roles and allows a directory role to be retired", () => {
+    const current = state({
+      accessRoles: defaultAccessRoles(),
+      session: { userId: "user-leela", role: "admin", name: "Leela Nair" },
+    });
+    expect(deleteAccessRole(current, "role-customer").result.ok).toBe(false);
+    expect(setAccessRoleStatus(current, "role-admin", "inactive").result.ok).toBe(false);
+    const added = saveAccessRole(current, {
+      id: "role-auditor",
+      name: "Auditor",
+      purpose: "Reads sample reports without dispatch access.",
+      status: "active",
+      permissions: ["reports"],
+    });
+    expect(added.result.ok).toBe(true);
+    const inactive = setAccessRoleStatus(added.state, "role-auditor", "inactive");
+    expect(inactive.state.accessRoles.find((role) => role.id === "role-auditor")?.status).toBe("inactive");
+    const removed = deleteAccessRole(inactive.state, "role-auditor");
+    expect(removed.result.ok).toBe(true);
+    expect(removed.state.accessRoles.some((role) => role.id === "role-auditor")).toBe(false);
+  });
+
+  it("signs a matching Google account into its existing role and creates a customer otherwise", () => {
+    const technician = signInWithGoogle(createSeedState(), { sub: "g-arjun", email: "Arjun@techcare.demo", name: "Someone Else" });
+    expect(technician.result.ok).toBe(true);
+    expect(technician.state.session?.providerId).toBe("p-arjun");
+    expect(technician.state.session?.name).toBe("Arjun Desai");
+    expect(technician.state.users.find((user) => user.id === "user-arjun")?.googleEmail).toBe("arjun@techcare.demo");
+
+    const created = signInWithGoogle(createSeedState(), { sub: "g-new", email: "new.person@gmail.com", name: "New Person" });
+    expect(created.state.session?.role).toBe("customer");
+    expect(created.state.customers.some((customer) => customer.email === "new.person@gmail.com")).toBe(true);
+  });
+
+  it("links Google to the signed-in technician and refuses a second owner", () => {
+    const current = createSeedState();
+    current.session = { userId: "user-arjun", role: "provider", name: "Arjun Desai", providerId: "p-arjun" };
+    const linked = linkGoogle(current, { sub: "g-mail", email: "arjun.desai@gmail.com", name: "Arjun Desai" });
+    expect(linked.result.ok).toBe(true);
+    const again = signInWithGoogle(linked.state, { sub: "g-mail", email: "arjun.desai@gmail.com", name: "Arjun" });
+    expect(again.state.session?.providerId).toBe("p-arjun");
+    const clash = linkGoogle(
+      { ...linked.state, session: { userId: "user-neha", role: "provider", name: "Neha Kapoor", providerId: "p-neha" } },
+      { sub: "g-mail", email: "arjun.desai@gmail.com", name: "Neha" },
+    );
+    expect(clash.result.ok).toBe(false);
+    const cleared = unlinkGoogle(linked.state);
+    expect(cleared.state.users.find((user) => user.id === "user-arjun")?.googleSub).toBeUndefined();
+  });
+
+  it("saves a technician profile and keeps skills required by an open job", () => {
+    const current = createSeedState();
+    current.session = { userId: "user-arjun", role: "provider", name: "Arjun Desai", providerId: "p-arjun" };
+    const provider = current.providers.find((item) => item.id === "p-arjun");
+    if (!provider) throw new Error("missing technician");
+    const saved = updateTechnicianProfile(current, {
+      name: "Arjun D.",
+      headline: "Laptops and remote cleanup",
+      phone: "98450 12211",
+      skills: provider.skills,
+      zoneIds: provider.zoneIds,
+      modes: provider.modes,
+      deviceTypes: provider.deviceTypes,
+    });
+    expect(saved.result.ok).toBe(true);
+    expect(saved.state.session?.name).toBe("Arjun D.");
+    expect(saved.state.providers.find((item) => item.id === "p-arjun")?.phone).toBe("9845012211");
+    const dropped = updateTechnicianProfile(saved.state, {
+      name: "Arjun D.",
+      headline: "Laptops and remote cleanup",
+      phone: "9845012211",
+      skills: provider.skills.filter((skill) => skill !== "laptop-repair"),
+      zoneIds: provider.zoneIds,
+      modes: provider.modes,
+      deviceTypes: provider.deviceTypes,
+    });
+    expect(dropped.result.ok).toBe(false);
+    expect(dropped.result.message).toContain("TC-2401");
   });
 });

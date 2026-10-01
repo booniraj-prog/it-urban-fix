@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { homeFor } from "../components/Shells";
+import { PaymentPanel } from "../components/PaymentPanel";
 import { CoverageForm, Empty, Field, MockNote, PostalChooser, QuoteView, freshId, useTitle } from "../components/ui";
 import { coverageMessage, zoneHealth } from "../domain/coverage";
 import { atTime, cx, formatDate, formatWindow, modeLabel, money } from "../domain/format";
@@ -164,6 +165,11 @@ export function BookPage() {
   return (
     <div className="container page-block">
       <p className="eyebrow">Booking {service.name}</p>
+      <p className="workflow">
+        <span>Step {step + 1} of {STEPS.length}</span>
+        <strong>{STEPS[step]}</strong>
+        <span>{step < 7 ? `Next: ${STEPS[step + 1]}` : "Next: confirm the demo booking"}</span>
+      </p>
       <ol className="stepper" aria-label="Booking progress">
         {STEPS.map((label, index) => (
           <li key={label} className={cx(index === step && "current", index < step && "done")} aria-current={index === step ? "step" : undefined}>
@@ -269,14 +275,22 @@ export function BookPage() {
                     <div className="slot-grid" role="radiogroup" aria-label={formatDate(date)}>
                       {daySlots.map((slot) => {
                         const key = `${slot.date}|${slot.window.id}`;
+                        const picked = slotKey === key;
                         return (
-                          <label key={key} className={cx("slot", slotKey === key && "selected", !slot.decision.ok && "disabled")}>
-                            <input type="radio" name="slot" disabled={!slot.decision.ok} checked={slotKey === key} onChange={() => setSlotKey(key)} />
-                            <span>
-                              <strong>{formatWindow(slot.window)}</strong>
-                              <small>{slot.decision.ok ? "Open" : slot.decision.reason}</small>
-                            </span>
-                          </label>
+                          <div key={key} className={picked ? "slot-line is-picked" : "slot-line"}>
+                            <label className={cx("slot", picked && "selected", !slot.decision.ok && "disabled")}>
+                              <input type="radio" name="slot" disabled={!slot.decision.ok} checked={picked} onChange={() => setSlotKey(key)} />
+                              <span>
+                                <strong>{formatWindow(slot.window)}</strong>
+                                <small>{slot.decision.ok ? "Open" : slot.decision.reason}</small>
+                              </span>
+                            </label>
+                            {picked ? (
+                              <button className="btn btn-primary" type="button" onClick={() => go(step + 1)}>
+                                Continue
+                              </button>
+                            ) : null}
+                          </div>
                         );
                       })}
                     </div>
@@ -361,7 +375,7 @@ export function BookPage() {
                 <li>{issue}</li>
                 <li>{slotDate && window ? `${formatDate(slotDate)} · ${formatWindow(window)}` : "No window"}</li>
               </ul>
-              <QuoteView quote={quote} />
+              <PaymentPanel quote={quote} />
               <MockNote>Confirming stores a demo booking in this browser. No card is charged and no message is sent outside the app.</MockNote>
               <label className="choice">
                 <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />
@@ -373,15 +387,15 @@ export function BookPage() {
             <button className="btn btn-ghost" type="button" disabled={step === 0} onClick={() => go(step - 1)}>
               Back
             </button>
-            {step < 7 ? (
+            {step < 7 && step !== 5 ? (
               <button className="btn btn-primary" type="button" onClick={() => go(step + 1)}>
                 Continue
               </button>
-            ) : (
+            ) : step === 7 ? (
               <button className="btn btn-primary" type="button" onClick={confirm}>
                 Confirm booking
               </button>
-            )}
+            ) : null}
           </div>
         </div>
         <aside className="book-panel">

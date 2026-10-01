@@ -1,23 +1,27 @@
 import { useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
+import { GoogleSignInButton } from "../components/GoogleSignIn";
 import { homeFor } from "../components/Shells";
+import { Icon } from "../components/Icons";
 import { Field, MockNote, useTitle } from "../components/ui";
 import { integrationNotes } from "../integrations/mocks";
 import { useStore } from "../state/store";
 import type { Role } from "../types";
 
-const PRIMARY = [
-  { email: "maya@techcare.demo", title: "Customer", copy: "Maya books visits and follows quotes." },
-  { email: "arjun@techcare.demo", title: "Technician", copy: "Arjun accepts jobs and updates progress." },
-  { email: "leela@techcare.demo", title: "Operations", copy: "Leela runs coverage, dispatch, and capacity." },
+const PRIMARY: { role: Role; email: string; title: string; copy: string }[] = [
+  { role: "customer", email: "maya@techcare.demo", title: "Customer", copy: "Book visits and follow quotes." },
+  { role: "provider", email: "arjun@techcare.demo", title: "Technician", copy: "Accept jobs and update progress." },
+  { role: "admin", email: "leela@techcare.demo", title: "Operations", copy: "Run coverage, dispatch, and reports." },
 ];
 
 export function LoginPage() {
   useTitle("Sign in");
-  const { state, signIn } = useStore();
+  const { state, signIn, signInWithGoogle } = useStore();
   const [params] = useSearchParams();
-  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<Role>("customer");
+  const [email, setEmail] = useState("maya@techcare.demo");
   const [password, setPassword] = useState("demo");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   if (state.session) {
     const next = params.get("next");
@@ -25,50 +29,101 @@ export function LoginPage() {
     return <Navigate to={homeFor(state.session.role)} replace />;
   }
 
-  const enter = (value: string, secret = "demo") => {
-    const result = signIn(value, secret);
+  const selected = PRIMARY.find((item) => item.role === role) ?? PRIMARY[0]!;
+
+  const enter = (value: string, secret: string, expected: Role) => {
+    setError("");
+    if (!value.trim()) {
+      setError("Enter the demo email for the role you selected.");
+      return;
+    }
+    if (!secret) {
+      setError("Enter the demo password. Every sample account uses demo.");
+      return;
+    }
+    const result = signIn(value, secret, expected);
     if (!result.ok) setError(result.message);
   };
 
   return (
-    <div className="container page-block narrow">
-      <h1>Sign in to the demo</h1>
-      <p>Each role has its own navigation. Password for every sample account is demo.</p>
-      <div className="card-grid">
-        {PRIMARY.map((account) => (
-          <button key={account.email} className="category-card" type="button" onClick={() => enter(account.email)}>
-            <h2>{account.title}</h2>
-            <p>{account.copy}</p>
-            <span className="fine">{account.email}</span>
+    <div className="container page-block signin-wrap">
+      <section className="panel signin">
+        <header>
+          <h1>Sign in</h1>
+          <p>Use a Google account, or a sample role.</p>
+        </header>
+        <GoogleSignInButton
+          onIdentity={(identity) => {
+            setError("");
+            const result = signInWithGoogle(identity);
+            if (!result.ok) setError(result.message);
+          }}
+        />
+        <p className="signin-or">or a sample role</p>
+        <div className="role-pick" role="group" aria-label="Choose a role">
+          {PRIMARY.map((account) => (
+            <button
+              key={account.role}
+              type="button"
+              aria-pressed={role === account.role}
+              onClick={() => {
+                setRole(account.role);
+                setEmail(account.email);
+                setError("");
+              }}
+            >
+              <strong>{account.title}</strong>
+              <span>{account.copy}</span>
+            </button>
+          ))}
+        </div>
+        <p className="hint">
+          {role === "provider"
+            ? `${selected.email} · password demo. Neha Kapoor (neha@techcare.demo) already has a job in progress.`
+            : `${selected.email} · password demo`}
+        </p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            enter(email, password, role);
+          }}
+        >
+          <Field id="email" label="Email">
+            <input id="email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} />
+          </Field>
+          <Field id="password" label="Password">
+            <div className="password-row">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <button
+                className="icon-btn"
+                type="button"
+                aria-pressed={showPassword}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                data-tooltip={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
+                onClick={() => setShowPassword((value) => !value)}
+              >
+                <Icon name={showPassword ? "eye-off" : "eye"} />
+              </button>
+            </div>
+          </Field>
+          {error ? (
+            <p className="field-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          <button className="btn btn-primary" type="submit">
+            Sign in as {selected.title}
           </button>
-        ))}
-      </div>
-      <details className="panel">
-        <summary>Another technician account</summary>
-        <p>Neha Kapoor has an in-progress Wi-Fi job. Email neha@techcare.demo.</p>
-        <button className="btn btn-secondary" type="button" onClick={() => enter("neha@techcare.demo")}>
-          Sign in as Neha
-        </button>
-      </details>
-      <form
-        className="panel stack"
-        onSubmit={(event) => {
-          event.preventDefault();
-          enter(email, password);
-        }}
-      >
-        <Field id="email" label="Email">
-          <input id="email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} />
-        </Field>
-        <Field id="password" label="Password">
-          <input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
-        </Field>
-        {error ? <p className="field-error" role="alert">{error}</p> : null}
-        <button className="btn btn-primary" type="submit">
-          Sign in
-        </button>
-      </form>
-      <MockNote>{integrationNotes.auth}</MockNote>
+        </form>
+        <MockNote>{integrationNotes.auth}</MockNote>
+      </section>
     </div>
   );
 }

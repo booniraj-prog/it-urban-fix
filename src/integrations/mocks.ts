@@ -4,7 +4,7 @@
  */
 
 export const integrationNotes = {
-  auth: "Sign-in uses the demo directory in this file’s sibling seed data. Every sample password is demo.",
+  auth: "Sample accounts use the password demo. Sign in with Google uses a Google account and stays in this browser.",
   payments: "No payment gateway is connected. Confirming a booking does not charge a card.",
   notifications: "Notices stay in this browser. No SMS or email is sent.",
   maps: "Coverage is stored as cities, zones, and postal codes. A map provider is not configured.",

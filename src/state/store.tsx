@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createSeedState } from "../data/seed";
+import { defaultAccessRoles } from "../domain/roles";
 import type { AppState } from "../types";
 import {
   acceptJob,
@@ -9,22 +10,30 @@ import {
   cancelBooking,
   declineJob,
   deleteAddress,
+  deleteAccessRole,
   deleteZone,
   markNoticesRead,
   placeBooking,
   requestCoverage,
+  reopenBooking,
   rescheduleBooking,
   reviewCoverageRequest,
   reopenSlot,
+  saveAccessRole,
   saveAddress,
   saveAreaPrice,
   saveCategory,
   saveCity,
+  linkGoogle,
   saveMyAvailability,
   saveProvider,
+  signInWithGoogle,
+  unlinkGoogle,
+  updateTechnicianProfile,
   saveService,
   saveSettings,
   saveZone,
+  setAccessRoleStatus,
   setBookingStatus,
   setInternalNote,
   setPostal,
@@ -33,8 +42,9 @@ import {
   type NewBookingInput,
   type Out,
   type Result,
+  type TechnicianProfilePatch,
 } from "./logic";
-import type { Address, AreaPrice, BookingStatus, Category, City, CoverageRequest, Provider, Service, WorkingHours, Zone } from "../types";
+import type { AccessRole, Address, AreaPrice, BookingStatus, Category, City, CoverageRequest, GoogleIdentity, Provider, Role, Service, WorkingHours, Zone } from "../types";
 
 const STORAGE_KEY = "techcare.demo.v1";
 
@@ -48,7 +58,10 @@ interface StoreValue {
   state: AppState;
   toasts: Toast[];
   dismissToast: (id: string) => void;
-  signIn: (email: string, password: string) => Result;
+  signIn: (email: string, password: string, expected?: Role) => Result;
+  signInWithGoogle: (identity: GoogleIdentity) => Result;
+  linkGoogle: (identity: GoogleIdentity) => Result;
+  unlinkGoogle: () => Result;
   signOut: () => void;
   setPostal: (postal: string) => Result;
   clearPostal: () => void;
@@ -59,6 +72,7 @@ interface StoreValue {
   placeBooking: (input: NewBookingInput) => Result;
   cancelBooking: (bookingId: string, reason: string) => Result;
   rescheduleBooking: (bookingId: string, date: string, windowId: string) => Result;
+  reopenBooking: (bookingId: string) => Result;
   assignProvider: (bookingId: string, providerId: string) => Result;
   setBookingStatus: (bookingId: string, status: BookingStatus, detail?: string) => Result;
   setInternalNote: (bookingId: string, note: string) => Result;
@@ -73,12 +87,16 @@ interface StoreValue {
   saveAreaPrice: (price: AreaPrice) => Result;
   saveProvider: (provider: Provider) => Result;
   saveMyAvailability: (workingHours: WorkingHours[], timeOff: string[], acceptingWork: boolean) => Result;
+  saveTechnicianProfile: (patch: TechnicianProfilePatch) => Result;
   blockSlot: (zoneId: string, date: string, windowId: string) => Result;
   reopenSlot: (zoneId: string, date: string, windowId: string) => Result;
   saveSettings: (settings: AppState["settings"]) => Result;
   markNoticesRead: () => void;
   reviewCoverageRequest: (id: string) => Result;
   resetDemo: () => void;
+  saveAccessRole: (role: AccessRole) => Result;
+  setAccessRoleStatus: (id: string, status: AccessRole["status"]) => Result;
+  deleteAccessRole: (id: string) => Result;
 }
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -90,6 +108,7 @@ function loadState(): AppState {
     if (!raw) return createSeedState();
     const parsed = JSON.parse(raw) as { version?: number; state?: AppState };
     if (parsed.version !== 1 || !parsed.state?.settings?.windows) return createSeedState();
+    if (!parsed.state.accessRoles) parsed.state.accessRoles = defaultAccessRoles();
     return parsed.state;
   } catch {
     return createSeedState();
@@ -99,6 +118,8 @@ function loadState(): AppState {
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(loadState);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, state }));
@@ -116,21 +137,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setToasts((current) => [...current, { id: `${Date.now()}-${current.length}`, message, tone }]);
     };
     const commit = (produce: (current: AppState) => Out, silent = false): Result => {
-      let result: Result = { ok: false, message: "Nothing changed." };
-      setState((current) => {
-        const next = produce(current);
-        result = next.result;
-        return next.result.ok ? next.state : current;
-      });
-      if (!silent && result.message) toast(result.message, result.ok ? "ok" : "error");
-      return result;
+      const next = produce(stateRef.current);
+      if (next.result.ok) {
+        stateRef.current = next.state;
+        setState(next.state);
+      }
+      if (!silent && next.result.message) toast(next.result.message, next.result.ok ? "ok" : "error");
+      return next.result;
     };
 
     return {
       state,
       toasts,
       dismissToast: (id) => setToasts((current) => current.filter((item) => item.id !== id)),
-      signIn: (email, password) => commit((current) => signIn(current, email, password)),
+      signIn: (email, password, expected) => commit((current) => signIn(current, email, password, expected)),
+      signInWithGoogle: (identity) => commit((current) => signInWithGoogle(current, identity)),
+      linkGoogle: (identity) => commit((current) => linkGoogle(current, identity)),
+      unlinkGoogle: () => commit((current) => unlinkGoogle(current)),
       signOut: () => setState((current) => ({ ...current, session: null })),
       setPostal: (postal) => commit((current) => setPostal(current, postal)),
       clearPostal: () => setState((current) => ({ ...current, coverage: { postalCode: "", zoneId: null, status: "idle" } })),
@@ -141,6 +164,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       placeBooking: (input) => commit((current) => placeBooking(current, input)),
       cancelBooking: (bookingId, reason) => commit((current) => cancelBooking(current, bookingId, reason)),
       rescheduleBooking: (bookingId, date, windowId) => commit((current) => rescheduleBooking(current, bookingId, date, windowId)),
+      reopenBooking: (bookingId) => commit((current) => reopenBooking(current, bookingId)),
       assignProvider: (bookingId, providerId) => commit((current) => assignProvider(current, bookingId, providerId)),
       setBookingStatus: (bookingId, status, detail) => commit((current) => setBookingStatus(current, bookingId, status, detail)),
       setInternalNote: (bookingId, note) => commit((current) => setInternalNote(current, bookingId, note)),
@@ -156,6 +180,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveProvider: (provider) => commit((current) => saveProvider(current, provider)),
       saveMyAvailability: (workingHours, timeOff, acceptingWork) =>
         commit((current) => saveMyAvailability(current, workingHours, timeOff, acceptingWork)),
+      saveTechnicianProfile: (patch) => commit((current) => updateTechnicianProfile(current, patch)),
       blockSlot: (zoneId, date, windowId) => commit((current) => blockSlot(current, zoneId, date, windowId)),
       reopenSlot: (zoneId, date, windowId) => commit((current) => reopenSlot(current, zoneId, date, windowId)),
       saveSettings: (settings) => commit((current) => saveSettings(current, settings)),
@@ -165,6 +190,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setState(createSeedState());
         toast("Demo data restored on this browser.", "info");
       },
+      saveAccessRole: (role) => commit((current) => saveAccessRole(current, role)),
+      setAccessRoleStatus: (id, status) => commit((current) => setAccessRoleStatus(current, id, status)),
+      deleteAccessRole: (id) => commit((current) => deleteAccessRole(current, id)),
     };
   }, [state, toasts]);
 

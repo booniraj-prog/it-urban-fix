@@ -1,9 +1,10 @@
 import { assessPostal, coverageMessage, isPostalShape, normalizePostal, serviceEnabled, zoneHealth } from "../domain/coverage";
-import { atTime, createId, weekday, windowFitsHours } from "../domain/format";
+import { atTime, createId, modeLabel, weekday, windowFitsHours } from "../domain/format";
 import { ADMIN_TRANSITIONS, STATUS_LABEL, canCustomerCancel, canCustomerReschedule, windowStart } from "../domain/lifecycle";
 import { jobWarnings } from "../domain/matching";
 import { calculateQuote } from "../domain/pricing";
 import { canAssign, canSchedule, findWindowOverlap } from "../domain/scheduling";
+import { lockedPermissions } from "../domain/roles";
 import { authorizePayment } from "../integrations/mocks";
 import type {
   Actor,
@@ -16,7 +17,10 @@ import type {
   City,
   CoverageRequest,
   Notice,
+  AccessRole,
+  GoogleIdentity,
   Provider,
+  Role,
   Service,
   Session,
   SlotDemand,
@@ -86,17 +90,180 @@ function nextRef(state: AppState): string {
   return `TC-${Math.max(2415, ...nums) + 1}`;
 }
 
-export function signIn(state: AppState, email: string, password: string): Out {
-  const user = state.users.find((item) => item.email.toLowerCase() === email.trim().toLowerCase());
-  if (!user || user.password !== password) return stop(state, "Those demo credentials were not recognized.");
-  const session: Session = {
+function inactiveRoleMessage(state: AppState, role: Role): string | null {
+  const record = (state.accessRoles ?? []).find((item) => item.systemKey === role);
+  if (record?.status !== "inactive") return null;
+  return `${record.name} is inactive. An administrator must reactivate it before this account can sign in.`;
+}
+
+function sessionFor(user: AppState["users"][number]): Session {
+  return {
     userId: user.id,
     role: user.role,
     name: user.name,
     customerId: user.customerId,
     providerId: user.providerId,
   };
-  return pass({ ...state, session }, `Signed in as ${user.name}.`);
+}
+
+export function signIn(state: AppState, email: string, password: string, expected?: Role): Out {
+  const user = state.users.find((item) => item.email.toLowerCase() === email.trim().toLowerCase());
+  if (!user || user.password !== password) return stop(state, "Those demo credentials were not recognized.");
+  const inactive = inactiveRoleMessage(state, user.role);
+  if (inactive) return stop(state, inactive);
+  if (expected && user.role !== expected) {
+    const wanted = (state.accessRoles ?? []).find((role) => role.systemKey === user.role)?.name ?? user.role;
+    return stop(state, `This demo account belongs to ${wanted}. Choose that role and try again.`);
+  }
+  return pass({ ...state, session: sessionFor(user) }, `Signed in as ${user.name}.`);
+}
+
+export function signInWithGoogle(state: AppState, identity: GoogleIdentity): Out {
+  const email = identity.email.trim().toLowerCase();
+  const name = identity.name.trim() || email;
+  if (!identity.sub || !email.includes("@")) return stop(state, "Google did not return a usable account.");
+  const linked = state.users.find((user) => user.googleSub === identity.sub);
+  const byEmail = state.users.find((user) => user.email.toLowerCase() === email || user.googleEmail === email);
+  if (linked && byEmail && linked.id !== byEmail.id) {
+    return stop(state, "That Google account does not match the email already on file.");
+  }
+  const user = linked ?? byEmail;
+  if (user?.googleSub && user.googleSub !== identity.sub) {
+    return stop(state, "This account is already linked to a different Google account.");
+  }
+  if (user) {
+    const inactive = inactiveRoleMessage(state, user.role);
+    if (inactive) return stop(state, inactive);
+    return pass(
+      {
+        ...state,
+        users: state.users.map((item) => (item.id === user.id ? { ...item, googleSub: identity.sub, googleEmail: email } : item)),
+        session: sessionFor(user),
+      },
+      `Signed in as ${user.name}.`,
+    );
+  }
+  const inactive = inactiveRoleMessage(state, "customer");
+  if (inactive) return stop(state, inactive);
+  if (name.length < 2) return stop(state, "Google did not return a name for this account.");
+  const customerId = `c-${identity.sub}`;
+  const account = {
+    id: `user-${identity.sub}`,
+    role: "customer" as const,
+    name,
+    email,
+    password: `google.${identity.sub}`,
+    customerId,
+    googleSub: identity.sub,
+    googleEmail: email,
+  };
+  return pass(
+    {
+      ...state,
+      customers: [...state.customers, { id: customerId, name, email, phone: "", addresses: [] }],
+      users: [...state.users, account],
+      session: sessionFor(account),
+    },
+    `Signed in as ${name}.`,
+  );
+}
+
+export function linkGoogle(state: AppState, identity: GoogleIdentity): Out {
+  const session = state.session;
+  if (!session) return stop(state, "Sign in before connecting Google.");
+  const email = identity.email.trim().toLowerCase();
+  if (!identity.sub || !email.includes("@")) return stop(state, "Google did not return a usable account.");
+  const taken = state.users.find(
+    (user) => user.id !== session.userId && (user.googleSub === identity.sub || user.email.toLowerCase() === email || user.googleEmail === email),
+  );
+  if (taken) return stop(state, "That Google account is already used by another sign-in.");
+  const mine = state.users.find((user) => user.id === session.userId);
+  if (!mine) return stop(state, "This sign-in has no account to update.");
+  if (mine.googleSub === identity.sub) return pass(state, `Google is already connected as ${email}.`);
+  return pass(
+    {
+      ...state,
+      users: state.users.map((user) => (user.id === mine.id ? { ...user, googleSub: identity.sub, googleEmail: email } : user)),
+    },
+    `Google connected as ${email}.`,
+  );
+}
+
+export function unlinkGoogle(state: AppState): Out {
+  const session = state.session;
+  if (!session) return stop(state, "Sign in before disconnecting Google.");
+  const mine = state.users.find((user) => user.id === session.userId);
+  if (!mine?.googleSub) return stop(state, "No Google account is connected.");
+  return pass(
+    {
+      ...state,
+      users: state.users.map((user) => (user.id === mine.id ? { ...user, googleSub: undefined, googleEmail: undefined } : user)),
+    },
+    "Google disconnected. The demo password still works.",
+  );
+}
+
+export interface TechnicianProfilePatch {
+  name: string;
+  headline: string;
+  phone: string;
+  skills: string[];
+  zoneIds: string[];
+  modes: VisitMode[];
+  deviceTypes: string[];
+}
+
+export function updateTechnicianProfile(state: AppState, patch: TechnicianProfilePatch): Out {
+  const session = state.session;
+  const providerId = session?.providerId;
+  if (!session || session.role !== "provider" || !providerId) return stop(state, "Sign in as a technician to edit this profile.");
+  const provider = state.providers.find((item) => item.id === providerId);
+  if (!provider) return stop(state, "Technician profile missing.");
+  const name = patch.name.trim();
+  const headline = patch.headline.trim();
+  const phone = digits(patch.phone);
+  if (name.length < 2) return stop(state, "Enter the name customers should see.");
+  if (headline.length < 8) return stop(state, "Enter a headline of at least a few words.");
+  if (phone.length !== 10) return stop(state, "Enter a 10-digit mobile number.");
+  const skills = [...new Set(patch.skills.filter((id) => state.services.some((service) => service.id === id)))];
+  const zoneIds = [...new Set(patch.zoneIds.filter((id) => state.zones.some((zone) => zone.id === id)))];
+  const modes = [...new Set(patch.modes.filter((mode) => mode === "onsite" || mode === "remote"))];
+  const deviceTypes = [...new Set(patch.deviceTypes.map((item) => item.trim()).filter(Boolean))];
+  if (skills.length === 0) return stop(state, "Keep at least one skill.");
+  if (zoneIds.length === 0) return stop(state, "Keep at least one area.");
+  if (modes.length === 0) return stop(state, "Keep at least one visit type.");
+  const open = state.bookings.filter(
+    (booking) => booking.providerId === providerId && booking.status !== "cancelled" && booking.status !== "completed",
+  );
+  for (const booking of open) {
+    if (provider.skills.includes(booking.serviceId) && !skills.includes(booking.serviceId)) {
+      const service = state.services.find((item) => item.id === booking.serviceId)?.name ?? "that service";
+      return stop(state, `${booking.ref} is still assigned for ${service}. Keep that skill, or ask operations to move the job.`);
+    }
+    if (provider.zoneIds.includes(booking.zoneId) && !zoneIds.includes(booking.zoneId)) {
+      const zone = state.zones.find((item) => item.id === booking.zoneId)?.name ?? "that area";
+      return stop(state, `${booking.ref} is in ${zone}. Keep that area, or ask operations to move the job.`);
+    }
+    if (provider.modes.includes(booking.mode) && !modes.includes(booking.mode)) {
+      return stop(state, `${booking.ref} is a ${modeLabel(booking.mode).toLowerCase()} visit. Keep that visit type.`);
+    }
+    const coveredDevice = provider.deviceTypes.length === 0 || provider.deviceTypes.includes(booking.deviceType);
+    const stillCovered = deviceTypes.length === 0 || deviceTypes.includes(booking.deviceType);
+    if (coveredDevice && !stillCovered) {
+      return stop(state, `${booking.ref} is for a ${booking.deviceType}. Keep that device, or leave devices blank to accept every type.`);
+    }
+  }
+  return pass(
+    {
+      ...state,
+      providers: state.providers.map((item) =>
+        item.id === providerId ? { ...item, name, headline, phone, skills, zoneIds, modes, deviceTypes } : item,
+      ),
+      users: state.users.map((user) => (user.id === session.userId ? { ...user, name } : user)),
+      session: { ...session, name },
+    },
+    "Profile saved in this demo.",
+  );
 }
 
 export function setPostal(state: AppState, postal: string): Out {
@@ -334,6 +501,7 @@ export function cancelBooking(state: AppState, bookingId: string, reason: string
   const admin = session.role === "admin";
   const owner = session.role === "customer" && session.customerId === booking.customerId;
   if (!admin && !owner) return stop(state, "You cannot cancel this booking.");
+  if (booking.status === "cancelled") return stop(state, `${booking.ref} is already cancelled.`);
   if (!reason.trim()) return stop(state, "Add a short reason.");
   if (!admin) {
     const decision = canCustomerCancel(booking, state.settings, now);
@@ -357,6 +525,65 @@ export function cancelBooking(state: AppState, bookingId: string, reason: string
     .forEach((userId) => items.push(notice(userId, "Visit cancelled", `${booking.ref} was cancelled.`, booking.id)));
   next = withNotices(next, items);
   return pass(next, `${booking.ref} is cancelled. No payment had been taken.`);
+}
+
+export function reopenBooking(state: AppState, bookingId: string, now = new Date()): Out {
+  const session = state.session;
+  const booking = state.bookings.find((item) => item.id === bookingId);
+  if (!session || !booking) return stop(state, "That booking could not be found.");
+  const owner = session.role === "customer" && session.customerId === booking.customerId;
+  if (!owner) return stop(state, "You cannot reopen this booking.");
+  if (booking.status !== "cancelled") return stop(state, "Only a cancelled visit can be reopened.");
+  const service = state.services.find((item) => item.id === booking.serviceId);
+  const zone = state.zones.find((item) => item.id === booking.zoneId);
+  const window = state.settings.windows.find((item) => item.id === booking.windowId);
+  if (!service || !zone || !window) return stop(state, "That window is no longer in the schedule.");
+  const decision = canSchedule(
+    state,
+    {
+      id: booking.id,
+      serviceId: booking.serviceId,
+      zoneId: booking.zoneId,
+      mode: booking.mode,
+      deviceType: booking.deviceType,
+      date: booking.date,
+      windowId: booking.windowId,
+      status: "confirmed",
+    },
+    now,
+    [booking.id],
+  );
+  if (!decision.ok) return stop(state, decision.reason);
+  let providerId = booking.providerId;
+  let status: BookingStatus = "confirmed";
+  let detail = "Reopened on the same window. No payment was taken.";
+  if (providerId) {
+    const simulated: Booking = { ...booking, status: "assigned", accepted: false };
+    const keep = canAssign(state, simulated, providerId, now);
+    if (keep.ok) {
+      status = "assigned";
+      detail = "Reopened with the same technician, who still needs to accept. No payment was taken.";
+    } else {
+      providerId = undefined;
+      detail = "Reopened. The previous technician is not free, so the visit needs a new assignment. No payment was taken.";
+    }
+  }
+  const nextBooking: Booking = {
+    ...booking,
+    status,
+    providerId,
+    accepted: false,
+    timeline: [...booking.timeline, stamp(status, "Reopened", actorOf(session), detail)],
+  };
+  let next = replaceBooking(state, nextBooking);
+  const items: Notice[] = [];
+  if (providerId) {
+    const userId = providerUser(state, providerId);
+    if (userId) items.push(notice(userId, "Job reopened", `${booking.ref} is on your schedule again.`, booking.id));
+  }
+  admins(state).forEach((userId) => items.push(notice(userId, "Visit reopened", `${booking.ref} was reopened by the customer.`, booking.id)));
+  next = withNotices(next, items);
+  return pass(next, `${booking.ref} is open again.`);
 }
 
 export function rescheduleBooking(state: AppState, bookingId: string, date: string, windowId: string, now = new Date()): Out {
@@ -752,6 +979,41 @@ export function reviewCoverageRequest(state: AppState, id: string): Out {
   return pass(
     { ...state, coverageRequests: state.coverageRequests.map((item) => (item.id === id ? { ...item, status: "reviewed" } : item)) },
     "Marked as reviewed.",
+  );
+}
+
+export function saveAccessRole(state: AppState, role: AccessRole): Out {
+  if (state.session?.role !== "admin") return stop(state, "Only operations can edit roles.");
+  const name = role.name.trim();
+  if (name.length < 2) return stop(state, "Give the role a name.");
+  if (!role.purpose.trim()) return stop(state, "Describe what this role is for.");
+  const rolesNow = state.accessRoles ?? [];
+  const existing = rolesNow.find((item) => item.id === role.id);
+  if (existing?.systemKey) {
+    if (role.status === "inactive") return stop(state, `${existing.name} is required for sign-in. It cannot be deactivated.`);
+    if (role.systemKey !== existing.systemKey) return stop(state, "A sign-in role cannot be turned into a different role.");
+    const missing = lockedPermissions(existing).filter((id) => !role.permissions.includes(id));
+    if (missing.length) return stop(state, "Required permissions for this sign-in role have to stay on.");
+  }
+  const next = { ...role, name, purpose: role.purpose.trim(), systemKey: existing?.systemKey };
+  const roles = existing ? rolesNow.map((item) => (item.id === role.id ? next : item)) : [...rolesNow, next];
+  return pass({ ...state, accessRoles: roles }, existing ? `${name} saved.` : `${name} added. It does not sign anyone in.`);
+}
+
+export function setAccessRoleStatus(state: AppState, id: string, status: AccessRole["status"]): Out {
+  const role = (state.accessRoles ?? []).find((item) => item.id === id);
+  if (!role) return stop(state, "That role is not in the directory.");
+  return saveAccessRole(state, { ...role, status });
+}
+
+export function deleteAccessRole(state: AppState, id: string): Out {
+  if (state.session?.role !== "admin") return stop(state, "Only operations can delete roles.");
+  const role = (state.accessRoles ?? []).find((item) => item.id === id);
+  if (!role) return stop(state, "That role is not in the directory.");
+  if (role.systemKey) return stop(state, `${role.name} is required for sign-in and cannot be deleted.`);
+  return pass(
+    { ...state, accessRoles: (state.accessRoles ?? []).filter((item) => item.id !== id) },
+    `${role.name} deleted. Inactive roles stay in the list until you delete them.`,
   );
 }
 
